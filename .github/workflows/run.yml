@@ -32,7 +32,7 @@ jobs:
           Q: ${{ inputs.qid }}
           A: ${{ inputs.attempt }}
         run: |
-          [[ "$K" =~ ^(explainer|studio|fake|selftest)$ ]] || { echo "bad kind"; exit 2; }
+          [[ "$K" =~ ^(explainer|studio|notes|fake|selftest)$ ]] || { echo "bad kind"; exit 2; }
           [[ "$R" =~ ^[0-9a-f-]{1,36}$ ]] || { echo "bad ref"; exit 2; }
           [[ "$Q" =~ ^([0-9a-f-]{36})?$ ]] || { echo "bad qid"; exit 2; }
           [[ "$A" =~ ^[0-9]{0,3}$ ]] || { echo "bad attempt"; exit 2; }
