@@ -1,0 +1,19 @@
+name: sweep
+# Every 10 minutes: asks the queue to restart lost jobs and start waiting ones. Off until the repository variable QUEUE_ON is 1.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+permissions: {}
+jobs:
+  sweep:
+    if: ${{ vars.QUEUE_ON == '1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Sweep
+        env:
+          SUPABASE_SECRET: ${{ secrets.SUPABASE_SECRET }}
+        run: |
+          curl -sS -f -o /dev/null -w "sweep %{http_code}\n" -X POST -H "Authorization: Bearer $SUPABASE_SECRET" -H "Content-Type: application/json" \
+            -d '{"op":"sweep"}' https://wzdkroxbfrlqijbeiwpk.supabase.co/functions/v1/runner-queue

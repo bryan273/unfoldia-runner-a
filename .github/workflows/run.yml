@@ -1,0 +1,72 @@
+name: run
+run-name: job ${{ inputs.kind }} ${{ inputs.qid || inputs.ref }}
+# Runs one job. The code is checked out at run time from a private repository with a read-only deploy key.
+# This log is public: the job prints only its kind, its outcome and counts.
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: job kind
+        required: true
+      ref:
+        description: job id
+        required: true
+      qid:
+        description: queue id
+        default: ""
+      attempt:
+        description: dispatch number
+        default: ""
+permissions: {}
+concurrency:
+  group: job-${{ inputs.kind }}-${{ inputs.ref }}
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 85
+    steps:
+      - name: Check inputs
+        env:
+          K: ${{ inputs.kind }}
+          R: ${{ inputs.ref }}
+          Q: ${{ inputs.qid }}
+          A: ${{ inputs.attempt }}
+        run: |
+          [[ "$K" =~ ^(explainer|studio|fake|selftest)$ ]] || { echo "bad kind"; exit 2; }
+          [[ "$R" =~ ^[0-9a-f-]{1,36}$ ]] || { echo "bad ref"; exit 2; }
+          [[ "$Q" =~ ^([0-9a-f-]{36})?$ ]] || { echo "bad qid"; exit 2; }
+          [[ "$A" =~ ^[0-9]{0,3}$ ]] || { echo "bad attempt"; exit 2; }
+      - name: Get the code
+        env:
+          CORE_DEPLOY_KEY: ${{ secrets.CORE_DEPLOY_KEY }}
+          CORE_REPO: ${{ vars.CORE_REPO || 'bryan273/unfoldia-core' }}
+          CORE_REF: ${{ vars.CORE_REF || 'main' }}
+        run: |
+          [ -n "$CORE_DEPLOY_KEY" ] || { echo "CORE_DEPLOY_KEY is not set"; exit 1; }
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$CORE_DEPLOY_KEY" > ~/.ssh/core && chmod 600 ~/.ssh/core
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > ~/.ssh/known_hosts
+          GIT_LFS_SKIP_SMUDGE=1 GIT_SSH_COMMAND="ssh -i $HOME/.ssh/core -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+            git clone -q --depth 1 --branch "$CORE_REF" "git@github.com:$CORE_REPO.git" core > /dev/null 2>&1 || { echo "could not fetch the code"; exit 1; }
+          rm -f ~/.ssh/core
+          echo "code at $(git -C core rev-parse --short HEAD)"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run
+        working-directory: core
+        env:
+          JOB_KIND: ${{ inputs.kind }}
+          JOB_REF: ${{ inputs.ref }}
+          JOB_QID: ${{ inputs.qid }}
+          JOB_ATTEMPT: ${{ inputs.attempt }}
+          SUPABASE_URL: https://wzdkroxbfrlqijbeiwpk.supabase.co
+          SUPABASE_SECRET: ${{ secrets.SUPABASE_SECRET }}
+          RKAPI_API_KEY: ${{ secrets.RKAPI_API_KEY }}
+          RKAPI_OPENAI_KEY: ${{ secrets.RKAPI_OPENAI_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_BASE: ${{ secrets.R2_PUBLIC_BASE }}
+        run: python runner/job.py
